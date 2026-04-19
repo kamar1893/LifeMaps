@@ -1,24 +1,163 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Search, TrendingUp, Users, Sparkles, MapPin } from "lucide-react";
 import { CategoryBadge } from "../components/CategoryBadge";
 import { MomentCard } from "../components/MomentCard";
+import noImage from "../assets/no-image.jpg";
 import {
   allCategories,
   type StoryCategory,
-  moments,
   users,
   trendingLocations,
 } from "../data/mockData";
 
+interface BackendUser {
+  _id?: string;
+  name?: string;
+  username?: string;
+  profileImage?: string;
+}
+
+interface BackendComment {
+  _id?: string;
+  user?: BackendUser;
+  text?: string;
+  createdAt?: string;
+}
+
+interface BackendPost {
+  _id: string;
+  content: string;
+  image?: string;
+  location?: string;
+  category?: StoryCategory;
+  likes?: string[];
+  user?: BackendUser;
+  comments?: BackendComment[];
+  createdAt?: string;
+}
+
 const Explore = () => {
   const [activeFilter, setActiveFilter] =
     useState<StoryCategory | "All">("All");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [momentsData, setMomentsData] = useState<BackendPost[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredMoments =
-    activeFilter === "All"
-      ? moments
-      : moments.filter((m) => m.category === activeFilter);
+  const fetchPosts = async () => {
+    try {
+      const res = await fetch("http://localhost:5000/api/posts");
+      const data = await res.json();
+
+      if (Array.isArray(data)) {
+        setMomentsData(data);
+      } else {
+        setMomentsData([]);
+      }
+    } catch (error) {
+      console.error("Failed to fetch posts:", error);
+      setMomentsData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPosts();
+  }, []);
+
+  const handleLike = async (id: string) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/posts/${id}/like`, {
+        method: "PUT",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error(data.message || "Like failed");
+        return;
+      }
+
+      setMomentsData((prev) =>
+        prev.map((post) =>
+          post._id === id
+            ? {
+                ...post,
+                likes: Array(data.likes).fill("liked"),
+              }
+            : post
+        )
+      );
+    } catch (error) {
+      console.error("Like failed:", error);
+    }
+  };
+
+  const normalizedMoments = useMemo(() => {
+    return momentsData.map((post, index) => ({
+      _id: post._id,
+      id: post._id,
+      userId: post.user?._id || `user-${index}`,
+      category: (post.category || "Food") as StoryCategory,
+      liked: false,
+      likes: post.likes?.length || 0,
+      comments:
+        post.comments?.map((comment, i) => ({
+          id: comment._id || `${post._id}-comment-${i}`,
+          userId: comment.user?._id || `user-${i}`,
+          text: comment.text || "",
+          timestamp: comment.createdAt || "Just now",
+        })) || [],
+      location: post.location || "Unknown Location",
+      date: post.createdAt
+        ? new Date(post.createdAt).toLocaleDateString()
+        : "",
+      title: post.content,
+      story: post.content,
+      timestamp: post.createdAt
+        ? new Date(post.createdAt).toLocaleString()
+        : "Just now",
+      backendUser: {
+        id: post.user?._id || `user-${index}`,
+        username:
+          post.user?.username ||
+          post.user?.name?.toLowerCase().replace(/\s+/g, "") ||
+          `user${index + 1}`,
+        displayName: post.user?.name || "Unknown User",
+        avatar:
+          post.user?.profileImage && post.user.profileImage.trim() !== ""
+            ? post.user.profileImage
+            : noImage,
+      },
+      image:
+        post.image && post.image.trim() !== ""
+          ? post.image.startsWith("http")
+            ? post.image
+            : `http://localhost:5000${post.image}`
+          : noImage,
+    }));
+  }, [momentsData]);
+
+  const filteredMoments = useMemo(() => {
+    let result =
+      activeFilter === "All"
+        ? normalizedMoments
+        : normalizedMoments.filter((m) => m.category === activeFilter);
+
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      result = result.filter(
+        (m) =>
+          m.title?.toLowerCase().includes(q) ||
+          m.story?.toLowerCase().includes(q) ||
+          m.location?.toLowerCase().includes(q) ||
+          m.backendUser?.displayName?.toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  }, [activeFilter, normalizedMoments, searchTerm]);
 
   const featuredCreators = [...users]
     .sort((a, b) => b.followers - a.followers)
@@ -27,14 +166,14 @@ const Explore = () => {
   return (
     <div style={{ minHeight: "100vh", padding: "90px 16px 40px" }}>
       <div
-  style={{
-    width: "100%",
-    display: "grid",
-    gap: "32px",
-    padding: "0 24px",
-    boxSizing: "border-box",
-  }}
->
+        style={{
+          width: "100%",
+          display: "grid",
+          gap: "32px",
+          padding: "0 24px",
+          boxSizing: "border-box",
+        }}
+      >
         <div style={{ textAlign: "center" }}>
           <h1
             style={{
@@ -58,7 +197,14 @@ const Explore = () => {
           </p>
         </div>
 
-        <div style={{ position: "relative", maxWidth: "500px", margin: "0 auto", width: "100%" }}>
+        <div
+          style={{
+            position: "relative",
+            maxWidth: "500px",
+            margin: "0 auto",
+            width: "100%",
+          }}
+        >
           <Search
             size={16}
             color="#9ca3af"
@@ -72,6 +218,8 @@ const Explore = () => {
           <input
             type="text"
             placeholder="Search places, stories, people..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
             style={{
               width: "100%",
               background: "rgba(255,255,255,0.06)",
@@ -149,7 +297,9 @@ const Explore = () => {
             }}
           >
             <TrendingUp size={18} color="#a5b4fc" />
-            <h2 style={{ margin: 0, fontSize: "20px" }}>Browse by Category</h2>
+            <h2 style={{ margin: 0, fontSize: "20px" }}>
+              Browse by Category
+            </h2>
           </div>
 
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -169,7 +319,10 @@ const Explore = () => {
                 fontWeight: 600,
               }}
             >
-              <Sparkles size={12} style={{ marginRight: "6px", verticalAlign: "middle" }} />
+              <Sparkles
+                size={12}
+                style={{ marginRight: "6px", verticalAlign: "middle" }}
+              />
               All
             </button>
 
@@ -182,7 +335,8 @@ const Explore = () => {
                   background: "transparent",
                   border: "none",
                   cursor: "pointer",
-                  transform: activeFilter === cat ? "scale(1.05)" : "scale(1)",
+                  transform:
+                    activeFilter === cat ? "scale(1.05)" : "scale(1)",
                   opacity: activeFilter === cat ? 1 : 0.8,
                 }}
               >
@@ -202,7 +356,9 @@ const Explore = () => {
             }}
           >
             <Users size={18} color="#a5b4fc" />
-            <h2 style={{ margin: 0, fontSize: "20px" }}>Featured Storytellers</h2>
+            <h2 style={{ margin: 0, fontSize: "20px" }}>
+              Featured Storytellers
+            </h2>
           </div>
 
           <div
@@ -267,12 +423,25 @@ const Explore = () => {
         </section>
 
         <section>
-          <h2 style={{ marginBottom: "16px", fontSize: "20px" }}>Discover Moments</h2>
-          <div style={{ display: "grid", gap: "24px" }}>
-            {filteredMoments.map((moment) => (
-              <MomentCard key={moment.id} moment={moment} />
-            ))}
-          </div>
+          <h2 style={{ marginBottom: "16px", fontSize: "20px" }}>
+            Discover Moments
+          </h2>
+
+          {loading ? (
+            <p style={{ color: "#9ca3af" }}>Loading posts...</p>
+          ) : filteredMoments.length === 0 ? (
+            <p style={{ color: "#9ca3af" }}>No moments found.</p>
+          ) : (
+            <div style={{ display: "grid", gap: "24px" }}>
+              {filteredMoments.map((moment) => (
+                <MomentCard
+                  key={moment.id}
+                  moment={moment as any}
+                  onLike={() => handleLike(moment._id)}
+                />
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </div>

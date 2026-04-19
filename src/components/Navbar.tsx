@@ -1,5 +1,14 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Compass, User, LogIn, MapPin, Menu, X } from "lucide-react";
+import {
+  Home,
+  Compass,
+  User,
+  LogIn,
+  MapPin,
+  Menu,
+  X,
+  PlusCircle,
+} from "lucide-react";
 import { useState } from "react";
 import { currentUser } from "../data/mockData";
 
@@ -70,6 +79,7 @@ export function Navbar() {
           >
             <MapPin size={16} color="#ffffff" />
           </div>
+
           <span
             style={{
               fontWeight: 700,
@@ -97,6 +107,11 @@ export function Navbar() {
           <Link to="/explore" style={desktopLinkStyle("/explore")}>
             <Compass size={16} />
             Explore
+          </Link>
+
+          <Link to="/create" style={desktopLinkStyle("/create")}>
+            <PlusCircle size={16} />
+            Create
           </Link>
         </div>
 
@@ -155,7 +170,11 @@ export function Navbar() {
             justifyContent: "space-around",
           }}
         >
-          <Link to="/" style={mobileLinkStyle("/")} onClick={() => setMobileOpen(false)}>
+          <Link
+            to="/"
+            style={mobileLinkStyle("/")}
+            onClick={() => setMobileOpen(false)}
+          >
             <Home size={18} />
             Feed
           </Link>
@@ -167,6 +186,15 @@ export function Navbar() {
           >
             <Compass size={18} />
             Explore
+          </Link>
+
+          <Link
+            to="/create"
+            style={mobileLinkStyle("/create")}
+            onClick={() => setMobileOpen(false)}
+          >
+            <PlusCircle size={18} />
+            Create
           </Link>
 
           <Link

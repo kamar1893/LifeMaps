@@ -1,47 +1,81 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Heart, MessageCircle, MapPin, Calendar } from "lucide-react";
 import { Link } from "react-router-dom";
-import { getUserById, categoryStyles } from "../data/mockData";
+import { categoryStyles } from "../data/mockData";
 import { CategoryBadge } from "./CategoryBadge";
-import { CommentSection } from "./CommentSection";
-
-interface CommentItem {
-  id: string | number;
-  userId: string | number;
-  text: string;
-  timestamp: string;
-}
-
-interface Moment {
-  id: string | number;
-  userId: string | number;
-  category: keyof typeof categoryStyles;
-  liked: boolean;
-  likes: number;
-  comments: CommentItem[];
-  gradient?: string;
-  location: string;
-  date?: string;
-  title: string;
-  story: string;
-  timestamp: string;
-}
+import noImage from "../assets/no-image.jpg";
 
 interface MomentCardProps {
-  moment: Moment;
+  moment: any;
+  onLike?: () => void;
 }
 
-export function MomentCard({ moment }: MomentCardProps) {
-  const [liked, setLiked] = useState(moment.liked);
-  const [likeCount, setLikeCount] = useState(moment.likes);
+export function MomentCard({ moment, onLike }: MomentCardProps) {
   const [showComments, setShowComments] = useState(false);
+  const [comments, setComments] = useState<any[]>(moment.comments || []);
+  const [commentText, setCommentText] = useState("");
 
-  const user = getUserById(moment.userId);
-  if (!user) return null;
+  const user = moment.backendUser || {
+    username: "unknown",
+    displayName: "Unknown User",
+    avatar: noImage,
+  };
 
-  const toggleLike = () => {
-    setLiked((prev) => !prev);
-    setLikeCount((prev) => (liked ? prev - 1 : prev + 1));
+  const fetchComments = async () => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/comments/${moment._id}`);
+      const data = await res.json();
+
+      if (Array.isArray(data)) {
+        setComments(
+          data.map((comment: any, index: number) => ({
+            id: comment._id || index,
+            userName: comment.user?.name || "Unknown User",
+            text: comment.text,
+            timestamp: comment.createdAt
+              ? new Date(comment.createdAt).toLocaleString()
+              : "Just now",
+          }))
+        );
+      }
+    } catch (error) {
+      console.error("Failed to fetch comments:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (showComments) {
+      fetchComments();
+    }
+  }, [showComments]);
+
+  const handleAddComment = async () => {
+    if (!commentText.trim()) return;
+
+    try {
+      const res = await fetch("http://localhost:5000/api/comments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          post: moment._id,
+          text: commentText,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.message || "Failed to add comment");
+        return;
+      }
+
+      setCommentText("");
+      fetchComments();
+    } catch (error) {
+      console.error("Failed to add comment:", error);
+    }
   };
 
   return (
@@ -49,17 +83,30 @@ export function MomentCard({ moment }: MomentCardProps) {
       style={{
         borderRadius: "18px",
         overflow: "hidden",
-        border: liked
-          ? "1px solid rgba(99,102,241,0.35)"
-          : "1px solid rgba(255,255,255,0.10)",
+        border: "1px solid rgba(255,255,255,0.10)",
         background:
           "linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
         backdropFilter: "blur(12px)",
-        boxShadow: liked
-          ? "0 0 20px rgba(99,102,241,0.15)"
-          : "0 8px 30px rgba(0,0,0,0.18)",
+        boxShadow: "0 8px 30px rgba(0,0,0,0.18)",
       }}
     >
+      {moment.image && (
+        <img
+          src={moment.image}
+          alt={moment.title}
+          style={{
+            width: "100%",
+            height: "260px",
+            objectFit: "cover",
+            display: "block",
+          }}
+          onError={(e) => {
+            e.currentTarget.onerror = null;
+            e.currentTarget.src = noImage;
+          }}
+        />
+      )}
+
       <div style={{ padding: "20px" }}>
         <div
           style={{
@@ -79,6 +126,10 @@ export function MomentCard({ moment }: MomentCardProps) {
                 borderRadius: "50%",
                 objectFit: "cover",
                 border: "2px solid rgba(99,102,241,0.2)",
+              }}
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = noImage;
               }}
             />
           </Link>
@@ -175,7 +226,7 @@ export function MomentCard({ moment }: MomentCardProps) {
 
         <div style={{ display: "flex", alignItems: "center", gap: "22px" }}>
           <button
-            onClick={toggleLike}
+            onClick={onLike}
             type="button"
             style={{
               display: "flex",
@@ -184,17 +235,11 @@ export function MomentCard({ moment }: MomentCardProps) {
               background: "transparent",
               border: "none",
               cursor: "pointer",
-              color: liked ? "#f97316" : "#9ca3af",
+              color: "#9ca3af",
             }}
           >
-            <Heart
-              size={18}
-              style={{
-                fill: liked ? "#f97316" : "transparent",
-                transition: "0.2s",
-              }}
-            />
-            <span style={{ fontSize: "14px" }}>{likeCount}</span>
+            <Heart size={18} />
+            <span style={{ fontSize: "14px" }}>{moment.likes}</span>
           </button>
 
           <button
@@ -211,7 +256,7 @@ export function MomentCard({ moment }: MomentCardProps) {
             }}
           >
             <MessageCircle size={18} />
-            <span style={{ fontSize: "14px" }}>{moment.comments.length}</span>
+            <span style={{ fontSize: "14px" }}>{comments.length}</span>
           </button>
         </div>
       </div>
@@ -223,7 +268,65 @@ export function MomentCard({ moment }: MomentCardProps) {
             padding: "16px",
           }}
         >
-          <CommentSection comments={moment.comments} />
+          <div style={{ display: "grid", gap: "12px", marginBottom: "14px" }}>
+            {comments.length === 0 ? (
+              <p style={{ color: "#9ca3af", margin: 0 }}>No comments yet.</p>
+            ) : (
+              comments.map((comment) => (
+                <div
+                  key={comment.id}
+                  style={{
+                    background: "rgba(255,255,255,0.05)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: "12px",
+                    padding: "10px 12px",
+                  }}
+                >
+                  <p style={{ margin: "0 0 6px", color: "white", fontWeight: 600 }}>
+                    {comment.userName}
+                  </p>
+                  <p style={{ margin: "0 0 6px", color: "#d1d5db" }}>
+                    {comment.text}
+                  </p>
+                  <p style={{ margin: 0, color: "#9ca3af", fontSize: "12px" }}>
+                    {comment.timestamp}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: "10px" }}>
+            <input
+              type="text"
+              placeholder="Write a comment..."
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              style={{
+                flex: 1,
+                padding: "10px 12px",
+                borderRadius: "10px",
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(255,255,255,0.05)",
+                color: "white",
+                outline: "none",
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleAddComment}
+              style={{
+                padding: "10px 14px",
+                borderRadius: "10px",
+                border: "none",
+                background: "#6366f1",
+                color: "white",
+                cursor: "pointer",
+              }}
+            >
+              Add
+            </button>
+          </div>
         </div>
       )}
     </div>
